@@ -25,9 +25,17 @@ if ($redis->exists($locationKey)) {
     $locationFromCache = false;
 }
 
-// Fetch "Status" (always from DB)
-$stmt = $pdo->query("SELECT status FROM user_info ORDER BY id DESC LIMIT 1");
-$status = $stmt->fetchColumn();
+// Fetch "Status" from Redis or DB
+$statusKey = "user_status";
+if ($redis->exists($statusKey)) {
+    $status = $redis->get($statusKey);
+    $statusFromCache = true;
+} else {
+    $stmt = $pdo->query("SELECT status FROM user_info ORDER BY id DESC LIMIT 1");
+    $status = $stmt->fetchColumn();
+    if ($status) $redis->setex($statusKey, 120, $status); // Cache status for 120 seconds
+    $statusFromCache = false;
+}
 ?>
 
 <html>
@@ -35,10 +43,9 @@ $status = $stmt->fetchColumn();
     <h1>Latest User Information</h1>
     <p><strong>Name:</strong> <?php echo htmlspecialchars($name); ?> (<?php echo $nameFromCache ? 'Cache' : 'DB'; ?>)</p>
     <p><strong>Location:</strong> <?php echo htmlspecialchars($location); ?> (<?php echo $locationFromCache ? 'Cache' : 'DB'; ?>)</p>
-    <p><strong>Status:</strong> <?php echo htmlspecialchars($status); ?> (DB)</p>
+    <p><strong>Status:</strong> <?php echo htmlspecialchars($status); ?> (<?php echo $statusFromCache ? 'Cache' : 'DB'; ?>)</p>
 
     <br>
     <a href="index.php">Back to Home</a>
 </body>
 </html>
-
