@@ -14,18 +14,25 @@ try {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS user_info (
             id SERIAL PRIMARY KEY,
-            name VARCHAR(100),
-            location VARCHAR(100),
-            status VARCHAR(20)
+            name VARCHAR(100) NOT NULL,
+            location VARCHAR(100) NOT NULL,
+            status VARCHAR(20) NOT NULL
         )
     ");
 
-    // Insert data if table is empty
-    $stmt = $pdo->query("SELECT COUNT(*) FROM user_info");
-    $rowCount = $stmt->fetchColumn();
-    
-    if ($rowCount == 0) {
-        $pdo->exec("INSERT INTO user_info (name, location, status) VALUES ('Ariful Islam', 'Dhaka', 'Active')");
+    // Handle form submission
+    if ($_SERVER["REQUEST_METHOD"] == "POST") {
+        $name = $_POST['name'];
+        $location = $_POST['location'];
+        $status = $_POST['status'];
+
+        // Insert data into DB
+        $stmt = $pdo->prepare("INSERT INTO user_info (name, location, status) VALUES (?, ?, ?)");
+        $stmt->execute([$name, $location, $status]);
+
+        // Update Redis cache
+        $redis->setex("user_name", 30, $name);
+        $redis->setex("user_location", 60, $location);
     }
 
     // Fetch "Name" from Redis or DB
@@ -34,9 +41,9 @@ try {
         $name = $redis->get($nameKey);
         $nameFromCache = true;
     } else {
-        $stmt = $pdo->query("SELECT name FROM user_info LIMIT 1");
+        $stmt = $pdo->query("SELECT name FROM user_info ORDER BY id DESC LIMIT 1");
         $name = $stmt->fetchColumn();
-        $redis->setex($nameKey, 30, $name);
+        if ($name) $redis->setex($nameKey, 30, $name);
         $nameFromCache = false;
     }
 
@@ -46,14 +53,14 @@ try {
         $location = $redis->get($locationKey);
         $locationFromCache = true;
     } else {
-        $stmt = $pdo->query("SELECT location FROM user_info LIMIT 1");
+        $stmt = $pdo->query("SELECT location FROM user_info ORDER BY id DESC LIMIT 1");
         $location = $stmt->fetchColumn();
-        $redis->setex($locationKey, 60, $location);
+        if ($location) $redis->setex($locationKey, 60, $location);
         $locationFromCache = false;
     }
 
-    // Fetch "Status" (always from DB, no caching)
-    $stmt = $pdo->query("SELECT status FROM user_info LIMIT 1");
+    // Fetch "Status" (always from DB)
+    $stmt = $pdo->query("SELECT status FROM user_info ORDER BY id DESC LIMIT 1");
     $status = $stmt->fetchColumn();
 
 } catch (PDOException $e) {
@@ -63,10 +70,23 @@ try {
 
 <html>
 <body>
-    <h1>User Information</h1>
-    <p><strong>Name:</strong> <?php echo $name; ?> (<?php echo $nameFromCache ? 'Cache' : 'DB'; ?>)</p>
-    <p><strong>Location:</strong> <?php echo $location; ?> (<?php echo $locationFromCache ? 'Cache' : 'DB'; ?>)</p>
-    <p><strong>Status:</strong> <?php echo $status; ?> (DB)</p>
+    <h1>Enter User Information</h1>
+    <form method="POST">
+        <label>Name:</label>
+        <input type="text" name="name" required><br><br>
+
+        <label>Location:</label>
+        <input type="text" name="location" required><br><br>
+
+        <label>Status:</label>
+        <input type="text" name="status" required><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Latest User Information</h2>
+    <p><strong>Name:</strong> <?php echo htmlspecialchars($name); ?> (<?php echo $nameFromCache ? 'Cache' : 'DB'; ?>)</p>
+    <p><strong>Location:</strong> <?php echo htmlspecialchars($location); ?> (<?php echo $locationFromCache ? 'Cache' : 'DB'; ?>)</p>
+    <p><strong>Status:</strong> <?php echo htmlspecialchars($status); ?> (DB)</p>
 </body>
 </html>
-
