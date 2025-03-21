@@ -1,0 +1,35 @@
+<?php
+$redis = new Redis();
+$redis->connect('redis', 6379);
+
+$cacheKey = 'sample_data';
+$nameKey = 'user_name';
+$ageKey = 'user_age';
+
+if ($redis->exists($cacheKey)) {
+    $data = json_decode($redis->get($cacheKey), true);
+    $name = $redis->get($nameKey);
+    $age = $redis->get($ageKey);
+    $fromCache = true;
+} else {
+    $data = ['message' => 'Hello from Database!', 'timestamp' => date('Y-m-d H:i:s')];
+    $name = 'MD AREFUL';
+    $age = 36;
+    
+    $redis->setex($cacheKey, 60, json_encode($data));
+    $redis->setex($nameKey, 60, $name);
+    $redis->setex($ageKey, 60, $age);
+    
+    $fromCache = false;
+}
+?>
+<html>
+<body>
+    <h1><?php echo $data['message']; ?></h1>
+    <p>Timestamp: <?php echo $data['timestamp']; ?></p>
+    <p>Name: <?php echo $name; ?></p>
+    <p>Age: <?php echo $age; ?></p>
+    <p>Data Source: <?php echo $fromCache ? 'Cache' : 'Database'; ?></p>
+</body>
+</html>
+
